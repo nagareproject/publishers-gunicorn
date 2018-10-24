@@ -12,27 +12,14 @@
 import multiprocessing
 from os.path import expanduser, abspath
 
-from gunicorn import reloader
 from gunicorn.app import base
 from nagare.server import http_publisher
 
 
-class Reloader(object):
-    def __init__(self, reloader_service, extra_files=None, callback=None):
-        print('RELOADER', extra_files, callback)
-
-    def add_extra_file(self, filename):
-        print('Extra file', filename)
-
-    def start(self):
-        pass
-
-
 class GunicornPublisher(base.BaseApplication):
-    def __init__(self, app_factory, start_handle_request, files_to_watch, **config):
+    def __init__(self, app_factory, start_handle_request, **config):
         self.app_factory = app_factory
         self.start_handle_request = start_handle_request
-        self.files_to_watch = files_to_watch
         self.config = config
 
         super(GunicornPublisher, self).__init__()
@@ -41,27 +28,19 @@ class GunicornPublisher(base.BaseApplication):
         for k, v in self.config.items():
             self.cfg.set(k, v)
 
-        def add_files(worker):
-            for filename in self.files_to_watch:
-                worker.reloader.add_extra_file(filename)
-
-        self.cfg.set('post_worker_init', add_files)
-
     def load(self):
         app = self.app_factory()
+
         return lambda environ, start_response: self.start_handle_request(app, environ, start_response)
 
 
 class Publisher(http_publisher.Publisher):
     """The Gunicorn publisher"""
 
-    INTERNAL_RELOADER = True
     CONFIG_SPEC = dict(
         http_publisher.Publisher.CONFIG_SPEC,
         host='string(default="127.0.0.1")',
         port='integer(default=8080)',
-        reload_engine='string(default="nagare")',
-        files_to_watch='string_list(default=list("$config_filename"))'
     )
     for spec in (
         'socket/string', 'umask/integer', 'backlog/integer',
@@ -84,7 +63,7 @@ class Publisher(http_publisher.Publisher):
         name, type_ = spec.split('/')
         CONFIG_SPEC[name] = type_ + '(default=None)'
 
-    def __init__(self, name, dist, workers, threads, files_to_watch, reloader_service=None, **config):
+    def __init__(self, name, dist, workers, threads, **config):
         """Initialization
         """
         nb_cpus = multiprocessing.cpu_count()
@@ -96,15 +75,9 @@ class Publisher(http_publisher.Publisher):
 
         config = {k: v for k, v in config.items() if v is not None}
 
-        nagare_reloader = lambda extra_files, callback: Reloader(reloader_service, extra_files, callback)  # noqa: E731
-        reloader.reloader_engines['nagare'] = nagare_reloader
-        reload = reloader_service is not None
-
         super(Publisher, self).__init__(
             name, dist,
             workers=workers, threads=threads,
-            reload=reload,
-            files_to_watch=reloader_service.files if reload else (),
             **config
         )
 

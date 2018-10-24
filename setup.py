@@ -24,7 +24,7 @@ setup(
     name='nagare-publishers-gunicorn',
     author='Net-ng',
     author_email='alain.poirier@net-ng.com',
-    description='Gnuicorn publisher',
+    description='Guicorn publisher',
     long_description=LONG_DESCRIPTION,
     license='BSD',
     keywords='',
