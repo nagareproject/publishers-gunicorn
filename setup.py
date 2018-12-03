@@ -33,7 +33,11 @@ setup(
     zip_safe=False,
     setup_requires=['setuptools_scm'],
     use_scm_version=True,
-    install_requires=['gunicorn[gthread]', 'nagare-server-http'],
+    install_requires=[
+        'ws4py', 'futures',
+        'gunicorn[gthread]',
+        'nagare-server-http'
+    ],
     entry_points='''
         [nagare.publishers]
         gunicorn = nagare.publishers.gunicorn_publisher:Publisher
