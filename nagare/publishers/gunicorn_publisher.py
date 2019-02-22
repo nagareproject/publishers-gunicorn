@@ -10,7 +10,9 @@
 """The Gunicorn publisher"""
 
 import os
+import sys
 import multiprocessing
+from functools import partial
 
 from ws4py import websocket
 from gunicorn.app import base
@@ -70,10 +72,10 @@ class Worker(gthread_worker):
 
 
 class GunicornPublisher(base.BaseApplication):
-    def __init__(self, app_factory, reloader, start_handle_request, **config):
-        self.app_factory = app_factory
+    def __init__(self, app_factory, reloader, launch_browser, **config):
+        self.load = app_factory
         self.reloader = reloader
-        self.start_handle_request = start_handle_request
+        self.launch_browser = launch_browser
         self.config = config
 
         super(GunicornPublisher, self).__init__()
@@ -82,22 +84,18 @@ class GunicornPublisher(base.BaseApplication):
         for k, v in self.config.items():
             self.cfg.set(k, v)
 
+        self.cfg.set('when_ready', lambda server: self.launch_browser())
+        if self.reloader is not None:
+            self.cfg.set('post_worker_init', partial(self.post_worker_init, self.reloader))
         self.cfg.set('post_request', self.post_request)
-        self.cfg.set('post_worker_init', lambda worker: self.post_worker_init(worker, self.reloader))
-
-    def load(self):
-        app = self.app_factory()
-
-        return lambda environ, start_response: self.start_handle_request(app, environ, start_response)
 
     @staticmethod
     def post_request(worker, req, environ, resp):
         req.websocket = environ['websocket']
 
     @staticmethod
-    def post_worker_init(worker, reloader):
-        if reloader is not None:
-            reloader.start(lambda reloader, path: os._exit(0))
+    def post_worker_init(reloader, worker):
+        reloader.start(lambda reloader, path: os._exit(0))
 
 
 class Publisher(http_publisher.Publisher):
@@ -130,7 +128,7 @@ class Publisher(http_publisher.Publisher):
         name, type_ = spec.split('/')
         CONFIG_SPEC[name] = type_ + '(default=None)'
 
-    def __init__(self, name, dist, workers, threads, socket=None, **config):
+    def __init__(self, name, dist, workers, threads, **config):
         """Initialization
         """
         nb_cpus = multiprocessing.cpu_count()
@@ -140,14 +138,24 @@ class Publisher(http_publisher.Publisher):
         self.has_multi_processes = workers > 1
         self.has_multi_threads = threads > 1
 
-        config = {k: v for k, v in config.items() if v is not None}
+        super(Publisher, self).__init__(name, dist, workers=workers, threads=threads, **config)
 
-        http_publisher.Publisher.__init__(
-            self,
-            name, dist,
-            workers=workers, threads=threads,
-            **config
-        )
+    @property
+    def bind(self):
+        socket = self.plugin_config['socket']
+
+        if socket:
+            bind = 'unix:{}'.format(os.path.abspath(os.path.expanduser(socket)))
+            endpoint = bind + ' -> '
+        else:
+            bind = '{}:{}'.format(self.plugin_config['host'], self.plugin_config['port'])
+            endpoint = 'http://' + bind
+
+        return not socket, endpoint, bind
+
+    @property
+    def endpoint(self):
+        return self.bind[:2]
 
     @staticmethod
     def monitor(reloader, reload_action):
@@ -157,18 +165,34 @@ class Publisher(http_publisher.Publisher):
     def set_websocket(websocket, environ):
         environ['websocket'] = websocket
 
+    def launch_browser(self):
+        pass
+
     def create_websocket(self, environ):
         environ['set_websocket'] = self.set_websocket
         return WebSocket() if environ.get('HTTP_UPGRADE', '') == 'websocket' else None
 
     def _create_app(self, services_service):
-        return lambda: services_service(super(Publisher, self).create_app)
+        return lambda: partial(self.start_handle_request, services_service(super(Publisher, self).create_app))
 
-    def _serve(self, app_factory, host, port, socket=None, reloader_service=None, **config):
+    def _serve(
+        self,
+        app_factory,
+        host, port, socket,
+        application_service, services_service, reloader_service=None,
+        **config
+    ):
+        super(Publisher, self)._serve(app_factory)
+
         if (reloader_service is not None) and self.has_multi_processes:
-            print("The reloader service can't be activated in multi-processes")
+            print("The reloader service can't be activated in multi-processes", file=sys.stderr)
             reloader_service = None
 
-        bind = ('unix:' + (os.path.abspath(os.path.expanduser(socket)))) if socket else ('%s:%d' % (host, port))
+        config = {k: v for k, v in config.items() if (k not in http_publisher.Publisher.CONFIG_SPEC) and (v is not None)}
 
-        GunicornPublisher(app_factory, reloader_service, self.start_handle_request, bind=bind, **config).run()
+        GunicornPublisher(
+            app_factory,
+            reloader_service,
+            super(Publisher, self).launch_browser,
+            bind=self.bind[2], **config
+        ).run()
