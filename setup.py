@@ -10,7 +10,6 @@
 # --
 
 import os
-import sys
 
 from setuptools import setup, find_packages
 
@@ -20,7 +19,6 @@ here = os.path.normpath(os.path.dirname(__file__))
 with open(os.path.join(os.path.dirname(__file__), 'README.rst')) as description:
     LONG_DESCRIPTION = description.read()
 
-install_requires = ['futures'] if sys.version_info.major == 2 else []
 
 setup(
     name='nagare-publishers-gunicorn',
@@ -35,7 +33,8 @@ setup(
     zip_safe=False,
     setup_requires=['setuptools_scm'],
     use_scm_version=True,
-    install_requires=install_requires + [
+    install_requires=[
+        'futures; python_version == "2.7"',
         'ws4py',
         'gunicorn[gthread]',
         'nagare-server-http'
