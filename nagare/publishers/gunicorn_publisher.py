@@ -16,7 +16,7 @@ from functools import partial
 from ws4py import websocket
 from gunicorn.app import base
 from gunicorn import util, workers
-from nagare.server import mvc_publisher
+from nagare.server import http_publisher
 
 
 gthread_worker = util.load_class(workers.SUPPORTED_WORKERS['gthread'])
@@ -86,8 +86,10 @@ class GunicornPublisher(base.BaseApplication):
 
         self.cfg.set('when_ready', lambda server: self.launch_browser())
         if self.reloader is not None:
-            post_woker_init = partial(self.post_worker_init, self.reloader, self.services_to_reload)
-            self.cfg.set('post_worker_init', post_woker_init)
+            self.cfg.set(
+                'post_worker_init',
+                lambda worker: self.post_worker_init(self.reloader, self.services_to_reload, worker)
+            )
 
         self.cfg.set('post_request', self.post_request)
 
@@ -103,11 +105,11 @@ class GunicornPublisher(base.BaseApplication):
         reloader.start(lambda reloader, path: os._exit(0))
 
 
-class Publisher(mvc_publisher.Publisher):
+class Publisher(http_publisher.Publisher):
     """The Gunicorn publisher"""
 
     CONFIG_SPEC = dict(
-        mvc_publisher.Publisher.CONFIG_SPEC,
+        http_publisher.Publisher.CONFIG_SPEC,
         host='string(default="127.0.0.1")',
         port='integer(default=8080)',
         worker_class='string(default="gthread")'
@@ -170,12 +172,12 @@ class Publisher(mvc_publisher.Publisher):
     def set_websocket(websocket, environ):
         environ['websocket'] = websocket
 
-    def launch_browser(self):
-        pass
-
     def create_websocket(self, environ):
         environ['set_websocket'] = self.set_websocket
         return WebSocket() if environ.get('HTTP_UPGRADE', '') == 'websocket' else None
+
+    def launch_browser(self):
+        pass
 
     def _create_app(self, services_service):
         return lambda: partial(self.start_handle_request, services_service(super(Publisher, self).create_app))
@@ -193,7 +195,7 @@ class Publisher(mvc_publisher.Publisher):
             print("The reloader service can't be activated in multi-processes")
             reloader_service = None
 
-        config = {k: v for k, v in config.items() if (k not in mvc_publisher.Publisher.CONFIG_SPEC) and (v is not None)}
+        config = {k: v for k, v in config.items() if (k not in http_publisher.Publisher.CONFIG_SPEC) and (v is not None)}
 
         GunicornPublisher(
             app_factory,
