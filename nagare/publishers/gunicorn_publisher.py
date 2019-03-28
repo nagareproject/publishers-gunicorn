@@ -140,7 +140,7 @@ class Publisher(http_publisher.Publisher):
         """
         nb_cpus = multiprocessing.cpu_count()
         workers = eval(workers or '1', {}, {'NB_CPUS': nb_cpus})
-        threads = eval(threads or '1', {}, {'NB_CPUS': nb_cpus})
+        threads = eval(threads or ('2 * NB_CPUS' if workers == 1 else '1'), {}, {'NB_CPUS': nb_cpus})
 
         self.has_multi_processes = workers > 1
         self.has_multi_threads = threads > 1
