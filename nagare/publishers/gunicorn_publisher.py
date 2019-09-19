@@ -14,6 +14,7 @@ import multiprocessing
 from functools import partial
 
 from ws4py import websocket
+from ws4py.server import wsgiutils
 from gunicorn.app import base
 from gunicorn import util, workers
 from nagare.server import http_publisher
@@ -70,7 +71,15 @@ class Worker(gthread_worker):
         return keepalive
 
 
+class WebSocketWSGIApplication(wsgiutils.WebSocketWSGIApplication):
+
+    def __call__(self, environ, start_response):
+        environ['ws4py.socket'] = None
+        return super(WebSocketWSGIApplication, self).__call__(environ, start_response)
+
+
 class GunicornPublisher(base.BaseApplication):
+
     def __init__(self, app_factory, reloader, services_to_reload, launch_browser, **config):
         self.load = app_factory
         self.reloader = reloader
@@ -95,7 +104,7 @@ class GunicornPublisher(base.BaseApplication):
 
     @staticmethod
     def post_request(worker, req, environ, resp):
-        req.websocket = environ['websocket']
+        req.websocket = environ.get('websocket')
 
     @staticmethod
     def post_worker_init(reloader, services_to_reload, worker):
@@ -134,6 +143,8 @@ class Publisher(http_publisher.Publisher):
     ):
         name, type_ = spec.split('/')
         CONFIG_SPEC[name] = type_ + '(default=None)'
+
+    websocket_app = WebSocketWSGIApplication
 
     def __init__(self, name, dist, workers, threads, **config):
         """Initialization
