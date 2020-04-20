@@ -80,12 +80,12 @@ class WebSocketWSGIApplication(wsgiutils.WebSocketWSGIApplication):
 
 class GunicornPublisher(base.BaseApplication):
 
-    def __init__(self, app_factory, reloader, services_to_reload, launch_browser, **config):
+    def __init__(self, app_factory, reloader, launch_browser, services_service, **config):
         self.load = app_factory
         self.reloader = reloader
-        self.services_to_reload = services_to_reload
         self.launch_browser = launch_browser
         self.config = config
+        self.services = services_service
 
         super(GunicornPublisher, self).__init__()
 
@@ -97,7 +97,7 @@ class GunicornPublisher(base.BaseApplication):
         if self.reloader is not None:
             self.cfg.set(
                 'post_worker_init',
-                lambda worker: self.post_worker_init(self.reloader, self.services_to_reload, worker)
+                lambda worker: self.services(self.post_worker_init, self.reloader, worker)
             )
 
         self.cfg.set('post_request', self.post_request)
@@ -107,11 +107,11 @@ class GunicornPublisher(base.BaseApplication):
         req.websocket = environ.get('websocket')
 
     @staticmethod
-    def post_worker_init(reloader, services_to_reload, worker):
-        for service in services_to_reload:
+    def post_worker_init(reloader, worker, services_service):
+        for service in services_service.reload_handlers:
             service.handle_reload()
 
-        reloader.start(lambda reloader, path: os._exit(0))
+        services_service(reloader.start, lambda reloader, path: os._exit(0))
 
 
 class Publisher(http_publisher.Publisher):
@@ -176,7 +176,7 @@ class Publisher(http_publisher.Publisher):
         return self.bind[:2]
 
     @staticmethod
-    def monitor(reloader, reload_action):
+    def monitor(reload_action):
         return 0
 
     @staticmethod
@@ -208,10 +208,10 @@ class Publisher(http_publisher.Publisher):
 
         config = {k: v for k, v in config.items() if (k not in http_publisher.Publisher.CONFIG_SPEC) and (v is not None)}
 
-        GunicornPublisher(
+        services_service(
+            GunicornPublisher,
             app_factory,
             reloader_service,
-            services_service.reload_handlers,
             super(Publisher, self).launch_browser,
             bind=self.bind[2], **config
         ).run()
