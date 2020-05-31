@@ -29,6 +29,7 @@ class Cfg(object):
     def __init__(self, cfg):
         self.keepalive = 30
         self.is_ssl = cfg.is_ssl
+        self.ssl_options = cfg.ssl_options
 
 
 class WebSocket(workers.gthread.TConn, websocket.WebSocket):
@@ -37,11 +38,7 @@ class WebSocket(workers.gthread.TConn, websocket.WebSocket):
         pass
 
     def bind_to(self, conn):
-        workers.gthread.TConn.__init__(
-            self,
-            Cfg(conn.cfg),
-            conn.sock, conn.client, conn.server
-        )
+        workers.gthread.TConn.__init__(self, Cfg(conn.cfg), conn.sock, conn.client, conn.server)
         websocket.WebSocket.__init__(self, conn.sock)
 
     def close(self):
@@ -159,7 +156,8 @@ class Publisher(http_publisher.Publisher):
         super(Publisher, self).__init__(name, dist, workers=workers, threads=threads, **config)
 
     @property
-    def bind(self):
+    def endpoint(self):
+        ssl = self.plugin_config['keyfile'] and self.plugin_config['certfile']
         socket = self.plugin_config['socket']
 
         if socket:
@@ -167,13 +165,9 @@ class Publisher(http_publisher.Publisher):
             endpoint = bind + ' -> '
         else:
             bind = '{}:{}'.format(self.plugin_config['host'], self.plugin_config['port'])
-            endpoint = 'http://' + bind
+            endpoint = 'http{}://{}'.format('s' if ssl else '', bind)
 
-        return not socket, endpoint, bind
-
-    @property
-    def endpoint(self):
-        return self.bind[:2]
+        return not socket, ssl, bind, endpoint
 
     @staticmethod
     def monitor(reload_action):
@@ -213,5 +207,5 @@ class Publisher(http_publisher.Publisher):
             app_factory,
             reloader_service,
             super(Publisher, self).launch_browser,
-            bind=self.bind[2], **config
+            bind=self.endpoint[2], **config
         ).run()
