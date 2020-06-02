@@ -179,7 +179,7 @@ class Publisher(http_publisher.Publisher):
 
     def create_websocket(self, environ):
         environ['set_websocket'] = self.set_websocket
-        return WebSocket() if environ.get('HTTP_UPGRADE', '') == 'websocket' else None
+        return WebSocket() if environ.get('HTTP_UPGRADE', '').lower() == 'websocket' else None
 
     def launch_browser(self):
         pass
