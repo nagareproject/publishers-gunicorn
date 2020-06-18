@@ -40,6 +40,9 @@ setup(
         'nagare-server-http'
     ],
     entry_points='''
+        [gunicorn.loggers]
+        nagare = nagare.publishers.gunicorn_publisher:Logger
+
         [nagare.publishers]
         gunicorn = nagare.publishers.gunicorn_publisher:Publisher
     '''

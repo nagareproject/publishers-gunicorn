@@ -10,18 +10,41 @@
 """The Gunicorn publisher"""
 
 import os
+import logging
+import traceback
 import multiprocessing
 from functools import partial
 
 from ws4py import websocket
 from ws4py.server import wsgiutils
 from gunicorn.app import base
-from gunicorn import util, workers
+from gunicorn import util, workers, glogging
 from nagare.server import http_publisher
 
 
 gthread_worker = util.load_class(workers.SUPPORTED_WORKERS['gthread'])
 workers.SUPPORTED_WORKERS['gthread'] = 'nagare.publishers.gunicorn_publisher.Worker'
+
+
+class Logger(glogging.Logger):
+    def __init__(self, cfg):
+        super(Logger, self).__init__(cfg)
+
+        self.error_log = logging.getLogger(cfg.logger_name + '.worker')
+        self.access_log = logging.getLogger(cfg.logger_name + '.access')
+
+        if cfg.loglevel:
+            loglevel = self.LOG_LEVELS.get(cfg.loglevel.lower(), logging.INFO)
+            self.error_log.setLevel(loglevel)
+
+    def access(self, resp, req, environ, request_time):
+        if self.cfg.logaccess:
+            safe_atoms = self.atoms_wrapper_class(self.atoms(resp, req, environ, request_time))
+
+            try:
+                self.access_log.info(self.cfg.access_log_format, safe_atoms, extra=safe_atoms)
+            except Exception:
+                self.error(traceback.format_exc())
 
 
 class Cfg(object):
@@ -77,7 +100,7 @@ class WebSocketWSGIApplication(wsgiutils.WebSocketWSGIApplication):
 
 class GunicornPublisher(base.BaseApplication):
 
-    def __init__(self, app_factory, reloader, launch_browser, services_service, **config):
+    def __init__(self, logger_name, logaccess, app_factory, reloader, launch_browser, services_service, **config):
         self.load = app_factory
         self.reloader = reloader
         self.launch_browser = launch_browser
@@ -85,6 +108,9 @@ class GunicornPublisher(base.BaseApplication):
         self.services = services_service
 
         super(GunicornPublisher, self).__init__()
+
+        self.cfg.logger_name = logger_name
+        self.cfg.logaccess = logaccess
 
     def load_config(self):
         for k, v in self.config.items():
@@ -98,6 +124,7 @@ class GunicornPublisher(base.BaseApplication):
             )
 
         self.cfg.set('post_request', self.post_request)
+        self.cfg.set('logger_class', 'egg:nagare-publishers-gunicorn#nagare')
 
     @staticmethod
     def post_request(worker, req, environ, resp):
@@ -118,7 +145,9 @@ class Publisher(http_publisher.Publisher):
         http_publisher.Publisher.CONFIG_SPEC,
         host='string(default="127.0.0.1")',
         port='integer(default=8080)',
-        worker_class='string(default="gthread")'
+        worker_class='string(default="gthread")',
+        logaccess='boolean(default=False)',
+        loglevel='string(default="")'
     )
     for spec in (
         'socket/string', 'umask/integer', 'backlog/integer',
@@ -130,9 +159,7 @@ class Publisher(http_publisher.Publisher):
         'preload/boolean',
         'chdir/string', 'daemon/boolean', 'pidfile/string', 'worker_tmp_dir/string',
         'user/string', 'group/string',
-        'tmp_upload_dir/string', 'accesslog/string', 'access_log_format/string',
-        'errorlog/string', 'loglevel/string', 'logger_class/string', 'logconf/string',
-        'syslog_addr/string', 'syslog/boolean', 'syslog_prefix/string', 'syslog_facility/string',
+        'tmp_upload_dir/string',
         'enable_stdio_inheritance/boolean', 'proc_name/string',
         'keyfile/string', 'certfile/string', 'ssl_version/integer', 'cert_reqs/integer',
         'ca_certs/string', 'suppress_ragged_eofs/boolean', 'do_handshake_on_connect/boolean',
@@ -143,9 +170,11 @@ class Publisher(http_publisher.Publisher):
 
     websocket_app = WebSocketWSGIApplication
 
-    def __init__(self, name, dist, workers, threads, **config):
+    def __init__(self, name, dist, logaccess, workers, threads, **config):
         """Initialization
         """
+        self.logaccess = logaccess
+
         nb_cpus = multiprocessing.cpu_count()
         workers = eval(workers or '1', {}, {'NB_CPUS': nb_cpus})
         threads = eval(threads or ('2 * NB_CPUS' if workers == 1 else '1'), {}, {'NB_CPUS': nb_cpus})
@@ -204,6 +233,8 @@ class Publisher(http_publisher.Publisher):
 
         services_service(
             GunicornPublisher,
+            self.logger.name,
+            self.logaccess,
             app_factory,
             reloader_service,
             super(Publisher, self).launch_browser,
