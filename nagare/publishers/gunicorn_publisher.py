@@ -149,24 +149,25 @@ class Publisher(http_publisher.Publisher):
         logaccess='boolean(default=False)',
         loglevel='string(default="")'
     )
-    for spec in (
-        'socket/string', 'umask/integer', 'backlog/integer',
-        'workers/string', 'threads/string',
-        'worker_connections/integer', 'max_requests/integer',
-        'timeout/integer', 'graceful_timeout/integer', 'keepalive/integer',
-        'limit_request_line/integer', 'limit_request_fields/integer',
-        'limit_request_field_size/integer',
-        'preload/boolean',
-        'chdir/string', 'daemon/boolean', 'pidfile/string', 'worker_tmp_dir/string',
-        'user/string', 'group/string',
-        'tmp_upload_dir/string',
-        'enable_stdio_inheritance/boolean', 'proc_name/string',
-        'keyfile/string', 'certfile/string', 'ssl_version/integer', 'cert_reqs/integer',
-        'ca_certs/string', 'suppress_ragged_eofs/boolean', 'do_handshake_on_connect/boolean',
-        'ciphers/string'
-    ):
-        name, type_ = spec.split('/')
-        CONFIG_SPEC[name] = type_ + '(default=None)'
+
+    CONFIG_SPEC.update(dict(
+        (param + '(default=None)').split('/') for param in (
+            'socket/string', 'umask/integer', 'backlog/integer',
+            'workers/string', 'threads/string',
+            'worker_connections/integer', 'max_requests/integer',
+            'timeout/integer', 'graceful_timeout/integer', 'keepalive/integer',
+            'limit_request_line/integer', 'limit_request_fields/integer',
+            'limit_request_field_size/integer',
+            'preload/boolean',
+            'chdir/string', 'daemon/boolean', 'pidfile/string', 'worker_tmp_dir/string',
+            'user/string', 'group/string',
+            'tmp_upload_dir/string',
+            'enable_stdio_inheritance/boolean', 'proc_name/string',
+            'keyfile/string', 'certfile/string', 'ssl_version/integer', 'cert_reqs/integer',
+            'ca_certs/string', 'suppress_ragged_eofs/boolean', 'do_handshake_on_connect/boolean',
+            'ciphers/string'
+        )
+    ))
 
     websocket_app = WebSocketWSGIApplication
 
@@ -214,7 +215,7 @@ class Publisher(http_publisher.Publisher):
         pass
 
     def _create_app(self, services_service):
-        return lambda: partial(self.start_handle_request, services_service(super(Publisher, self).create_app))
+        return lambda: partial(self.start_handle_request, services_service(super(Publisher, self)._create_app))
 
     def _serve(
         self,
