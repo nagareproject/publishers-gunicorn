@@ -214,6 +214,13 @@ class Publisher(http_publisher.Publisher):
     def launch_browser(self):
         pass
 
+    def start_handle_request(self, app, environ, start_response):
+        return super().start_handle_request(
+            app,
+            environ,
+            lambda status, headers: None if start_response.__self__.status else start_response(status, headers)
+        )
+
     def _create_app(self, services_service):
         return lambda: partial(self.start_handle_request, services_service(super(Publisher, self)._create_app))
 
