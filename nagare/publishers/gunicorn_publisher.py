@@ -234,7 +234,7 @@ class Publisher(http_publisher.Publisher):
         services_service(super(Publisher, self)._serve, app_factory)
 
         if (reloader_service is not None) and self.has_multi_processes:
-            print("The reloader service can't be activated in multi-processes")
+            self.logger.warning("The reloader service can't be activated in multi-processes")
             reloader_service = None
 
         config = {k: v for k, v in config.items() if (k not in http_publisher.Publisher.CONFIG_SPEC) and (v is not None)}
