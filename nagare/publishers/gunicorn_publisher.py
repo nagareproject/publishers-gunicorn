@@ -132,9 +132,7 @@ class GunicornPublisher(base.BaseApplication):
 
     @staticmethod
     def post_worker_init(reloader, worker, services_service):
-        for service in services_service.reload_handlers:
-            service.handle_reload()
-
+        services_service.handle_reload()
         services_service(reloader.start, lambda reloader, path: os._exit(0))
 
 
@@ -214,15 +212,20 @@ class Publisher(http_publisher.Publisher):
     def launch_browser(self):
         pass
 
-    def start_handle_request(self, app, environ, start_response):
-        return super().start_handle_request(
+    def start_handle_request(self, app, environ, start_response, services_service):
+        return services_service(
+            super().start_handle_request,
             app,
             environ,
             lambda status, headers: None if start_response.__self__.status else start_response(status, headers)
         )
 
     def _create_app(self, services_service):
-        return lambda: partial(self.start_handle_request, services_service(super(Publisher, self)._create_app))
+        return lambda: partial(
+            services_service,
+            self.start_handle_request,
+            services_service(super(Publisher, self)._create_app)
+        )
 
     def _serve(
         self,
