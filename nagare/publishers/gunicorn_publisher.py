@@ -214,7 +214,7 @@ class Publisher(http_publisher.Publisher):
 
     def start_handle_request(self, app, environ, start_response, services_service):
         return services_service(
-            super().start_handle_request,
+            super(Publisher, self).start_handle_request,
             app,
             environ,
             lambda status, headers: None if start_response.__self__.status else start_response(status, headers)
