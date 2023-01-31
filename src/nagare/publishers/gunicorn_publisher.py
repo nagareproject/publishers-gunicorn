@@ -1,5 +1,5 @@
 # --
-# Copyright (c) 2008-2022 Net-ng.
+# Copyright (c) 2008-2023 Net-ng.
 # All rights reserved.
 #
 # This software is licensed under the BSD License, as described in
@@ -7,20 +7,19 @@
 # this distribution.
 # --
 
-"""The Gunicorn publisher"""
+"""The Gunicorn publisher."""
 
-import os
-import logging
-import traceback
-import multiprocessing
 from functools import partial
+import logging
+import multiprocessing
+import os
+import traceback
 
+from gunicorn import glogging, util, workers
+from gunicorn.app import base
+from nagare.server import http_publisher
 from ws4py import websocket
 from ws4py.server import wsgiutils
-from gunicorn.app import base
-from gunicorn import util, workers, glogging
-from nagare.server import http_publisher
-
 
 gthread_worker = util.load_class(workers.SUPPORTED_WORKERS['gthread'])
 workers.SUPPORTED_WORKERS['gthread'] = 'nagare.publishers.gunicorn_publisher.Worker'
@@ -48,7 +47,6 @@ class Logger(glogging.Logger):
 
 
 class Cfg(object):
-
     def __init__(self, cfg):
         self.keepalive = 30
         self.is_ssl = cfg.is_ssl
@@ -56,7 +54,6 @@ class Cfg(object):
 
 
 class WebSocket(workers.gthread.TConn, websocket.WebSocket):
-
     def __init__(self):
         pass
 
@@ -70,7 +67,6 @@ class WebSocket(workers.gthread.TConn, websocket.WebSocket):
 
 
 class Worker(gthread_worker):
-
     def handle(self, conn):
         if isinstance(conn, WebSocket):
             return conn.process(conn.sock.recv(1024)), conn
@@ -92,14 +88,12 @@ class Worker(gthread_worker):
 
 
 class WebSocketWSGIApplication(wsgiutils.WebSocketWSGIApplication):
-
     def __call__(self, environ, start_response):
         environ['ws4py.socket'] = None
         return super(WebSocketWSGIApplication, self).__call__(environ, start_response)
 
 
 class GunicornPublisher(base.BaseApplication):
-
     def __init__(self, logger_name, logaccess, app_factory, reloader, launch_browser, services_service, **config):
         self.load = app_factory
         self.reloader = reloader
@@ -118,10 +112,7 @@ class GunicornPublisher(base.BaseApplication):
 
         self.cfg.set('when_ready', lambda server: self.launch_browser())
         if self.reloader is not None:
-            self.cfg.set(
-                'post_worker_init',
-                lambda worker: self.services(self.post_worker_init, self.reloader, worker)
-            )
+            self.cfg.set('post_worker_init', lambda worker: self.services(self.post_worker_init, self.reloader, worker))
 
         self.cfg.set('post_request', self.post_request)
         self.cfg.set('logger_class', 'egg:nagare-publishers-gunicorn#nagare')
@@ -137,7 +128,7 @@ class GunicornPublisher(base.BaseApplication):
 
 
 class Publisher(http_publisher.Publisher):
-    """The Gunicorn publisher"""
+    """The Gunicorn publisher."""
 
     CONFIG_SPEC = dict(
         http_publisher.Publisher.CONFIG_SPEC,
@@ -145,33 +136,52 @@ class Publisher(http_publisher.Publisher):
         port='integer(default=8080)',
         worker_class='string(default="gthread")',
         logaccess='boolean(default=False)',
-        loglevel='string(default="")'
+        loglevel='string(default="")',
     )
 
-    CONFIG_SPEC.update(dict(
-        (param + '(default=None)').split('/') for param in (
-            'socket/string', 'umask/integer', 'backlog/integer',
-            'workers/string', 'threads/string',
-            'worker_connections/integer', 'max_requests/integer',
-            'timeout/integer', 'graceful_timeout/integer', 'keepalive/integer',
-            'limit_request_line/integer', 'limit_request_fields/integer',
-            'limit_request_field_size/integer',
-            'preload/boolean',
-            'chdir/string', 'daemon/boolean', 'pidfile/string', 'worker_tmp_dir/string',
-            'user/string', 'group/string',
-            'tmp_upload_dir/string',
-            'enable_stdio_inheritance/boolean', 'proc_name/string',
-            'keyfile/string', 'certfile/string', 'ssl_version/integer', 'cert_reqs/integer',
-            'ca_certs/string', 'suppress_ragged_eofs/boolean', 'do_handshake_on_connect/boolean',
-            'ciphers/string'
+    CONFIG_SPEC.update(
+        dict(
+            (param + '(default=None)').split('/')
+            for param in (
+                'socket/string',
+                'umask/integer',
+                'backlog/integer',
+                'workers/string',
+                'threads/string',
+                'worker_connections/integer',
+                'max_requests/integer',
+                'timeout/integer',
+                'graceful_timeout/integer',
+                'keepalive/integer',
+                'limit_request_line/integer',
+                'limit_request_fields/integer',
+                'limit_request_field_size/integer',
+                'preload/boolean',
+                'chdir/string',
+                'daemon/boolean',
+                'pidfile/string',
+                'worker_tmp_dir/string',
+                'user/string',
+                'group/string',
+                'tmp_upload_dir/string',
+                'enable_stdio_inheritance/boolean',
+                'proc_name/string',
+                'keyfile/string',
+                'certfile/string',
+                'ssl_version/integer',
+                'cert_reqs/integer',
+                'ca_certs/string',
+                'suppress_ragged_eofs/boolean',
+                'do_handshake_on_connect/boolean',
+                'ciphers/string',
+            )
         )
-    ))
+    )
 
     websocket_app = WebSocketWSGIApplication
 
     def __init__(self, name, dist, logaccess, workers, threads, **config):
-        """Initialization
-        """
+        """Initialization."""
         self.logaccess = logaccess
 
         nb_cpus = multiprocessing.cpu_count()
@@ -217,30 +227,24 @@ class Publisher(http_publisher.Publisher):
             super(Publisher, self).start_handle_request,
             app,
             environ,
-            lambda status, headers: None if start_response.__self__.status else start_response(status, headers)
+            lambda status, headers: None if start_response.__self__.status else start_response(status, headers),
         )
 
     def _create_app(self, services_service):
         return lambda: partial(
-            services_service,
-            self.start_handle_request,
-            services_service(super(Publisher, self)._create_app)
+            services_service, self.start_handle_request, services_service(super(Publisher, self)._create_app)
         )
 
-    def _serve(
-        self,
-        app_factory,
-        host, port, socket,
-        services_service, reloader_service=None,
-        **config
-    ):
+    def _serve(self, app_factory, host, port, socket, services_service, reloader_service=None, **config):
         services_service(super(Publisher, self)._serve, app_factory)
 
         if (reloader_service is not None) and self.has_multi_processes:
             self.logger.warning("The reloader service can't be activated in multi-processes")
             reloader_service = None
 
-        config = {k: v for k, v in config.items() if (k not in http_publisher.Publisher.CONFIG_SPEC) and (v is not None)}
+        config = {
+            k: v for k, v in config.items() if (k not in http_publisher.Publisher.CONFIG_SPEC) and (v is not None)
+        }
 
         services_service(
             GunicornPublisher,
@@ -249,5 +253,6 @@ class Publisher(http_publisher.Publisher):
             app_factory,
             reloader_service,
             super(Publisher, self).launch_browser,
-            bind=self.endpoint[2], **config
+            bind=self.endpoint[2],
+            **config,
         ).run()
