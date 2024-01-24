@@ -1,5 +1,5 @@
 # --
-# Copyright (c) 2008-2023 Net-ng.
+# Copyright (c) 2008-2024 Net-ng.
 # All rights reserved.
 #
 # This software is licensed under the BSD License, as described in
@@ -9,17 +9,18 @@
 
 """The Gunicorn publisher."""
 
-from functools import partial
-import logging
-import multiprocessing
 import os
+import logging
 import traceback
+import multiprocessing
+from functools import partial
 
-from gunicorn import glogging, util, workers
-from gunicorn.app import base
-from nagare.server import http_publisher
 from ws4py import websocket
+from gunicorn import util, workers, glogging
+from gunicorn.app import base
 from ws4py.server import wsgiutils
+
+from nagare.server import http_publisher
 
 gthread_worker = util.load_class(workers.SUPPORTED_WORKERS['gthread'])
 workers.SUPPORTED_WORKERS['gthread'] = 'nagare.publishers.gunicorn_publisher.Worker'
@@ -185,8 +186,8 @@ class Publisher(http_publisher.Publisher):
         self.logaccess = logaccess
 
         nb_cpus = multiprocessing.cpu_count()
-        workers = eval(workers or '1', {}, {'NB_CPUS': nb_cpus})
-        threads = eval(threads or ('2 * NB_CPUS' if workers == 1 else '1'), {}, {'NB_CPUS': nb_cpus})
+        workers = eval(workers or '1', {}, {'NB_CPUS': nb_cpus})  # noqa: S307
+        threads = eval(threads or ('2 * NB_CPUS' if workers == 1 else '1'), {}, {'NB_CPUS': nb_cpus})  # noqa: S307
 
         self.has_multi_processes = workers > 1
         self.has_multi_threads = threads > 1
