@@ -231,7 +231,9 @@ class Publisher(http_publisher.Publisher):
         )
 
     def _create_app(self, services_service):
-        return lambda: partial(services_service, self.start_handle_request, services_service(super()._create_app))
+        return lambda: partial(
+            services_service, self.start_handle_request, services_service(super(Publisher, self)._create_app)
+        )
 
     def _serve(self, app_factory, host, port, socket, services_service, reloader_service=None, **config):
         services_service(super()._serve, app_factory)
