@@ -1,5 +1,5 @@
 # --
-# Copyright (c) 2008-2024 Net-ng.
+# Copyright (c) 2014-2025 Net-ng.
 # All rights reserved.
 #
 # This software is licensed under the BSD License, as described in
@@ -28,7 +28,7 @@ workers.SUPPORTED_WORKERS['gthread'] = 'nagare.publishers.gunicorn_publisher.Wor
 
 class Logger(glogging.Logger):
     def __init__(self, cfg):
-        super(Logger, self).__init__(cfg)
+        super().__init__(cfg)
 
         self.error_log = logging.getLogger(cfg.logger_name + '.worker')
         self.access_log = logging.getLogger(cfg.logger_name + '.access')
@@ -47,7 +47,7 @@ class Logger(glogging.Logger):
                 self.error(traceback.format_exc())
 
 
-class Cfg(object):
+class Cfg:
     def __init__(self, cfg):
         self.keepalive = 30
         self.is_ssl = cfg.is_ssl
@@ -64,7 +64,7 @@ class WebSocket(workers.gthread.TConn, websocket.WebSocket):
 
     def close(self):
         self.closed(None)
-        super(WebSocket, self).close()
+        super().close()
 
 
 class Worker(gthread_worker):
@@ -72,7 +72,7 @@ class Worker(gthread_worker):
         if isinstance(conn, WebSocket):
             return conn.process(conn.sock.recv(1024)), conn
         else:
-            keepalive, conn = super(Worker, self).handle(conn)
+            keepalive, conn = super().handle(conn)
             websocket = conn.websocket
             if websocket is not None:
                 del conn.websocket
@@ -82,7 +82,7 @@ class Worker(gthread_worker):
             return keepalive, conn
 
     def handle_request(self, req, conn):
-        keepalive = super(Worker, self).handle_request(req, conn)
+        keepalive = super().handle_request(req, conn)
         conn.websocket = req.websocket
 
         return keepalive
@@ -91,7 +91,7 @@ class Worker(gthread_worker):
 class WebSocketWSGIApplication(wsgiutils.WebSocketWSGIApplication):
     def __call__(self, environ, start_response):
         environ['ws4py.socket'] = None
-        return super(WebSocketWSGIApplication, self).__call__(environ, start_response)
+        return super().__call__(environ, start_response)
 
 
 class GunicornPublisher(base.BaseApplication):
@@ -102,7 +102,7 @@ class GunicornPublisher(base.BaseApplication):
         self.config = config
         self.services = services_service
 
-        super(GunicornPublisher, self).__init__()
+        super().__init__()
 
         self.cfg.logger_name = logger_name
         self.cfg.logaccess = logaccess
@@ -131,17 +131,16 @@ class GunicornPublisher(base.BaseApplication):
 class Publisher(http_publisher.Publisher):
     """The Gunicorn publisher."""
 
-    CONFIG_SPEC = dict(
-        http_publisher.Publisher.CONFIG_SPEC,
-        host='string(default="127.0.0.1")',
-        port='integer(default=8080)',
-        worker_class='string(default="gthread")',
-        logaccess='boolean(default=False)',
-        loglevel='string(default="")',
-    )
-
-    CONFIG_SPEC.update(
-        dict(
+    CONFIG_SPEC = (
+        http_publisher.Publisher.CONFIG_SPEC
+        | {
+            'host': 'string(default="127.0.0.1")',
+            'port': 'integer(default=8080)',
+            'worker_class': 'string(default="gthread")',
+            'logaccess': 'boolean(default=False)',
+            'loglevel': 'string(default="")',
+        }
+        | dict(
             (param + '(default=None)').split('/')
             for param in (
                 'socket/string',
@@ -192,7 +191,7 @@ class Publisher(http_publisher.Publisher):
         self.has_multi_processes = workers > 1
         self.has_multi_threads = threads > 1
 
-        super(Publisher, self).__init__(name, dist, workers=workers, threads=threads, **config)
+        super().__init__(name, dist, workers=workers, threads=threads, **config)
 
     @property
     def endpoint(self):
@@ -225,19 +224,17 @@ class Publisher(http_publisher.Publisher):
 
     def start_handle_request(self, app, environ, start_response, services_service):
         return services_service(
-            super(Publisher, self).start_handle_request,
+            super().start_handle_request,
             app,
             environ,
             lambda status, headers: None if start_response.__self__.status else start_response(status, headers),
         )
 
     def _create_app(self, services_service):
-        return lambda: partial(
-            services_service, self.start_handle_request, services_service(super(Publisher, self)._create_app)
-        )
+        return lambda: partial(services_service, self.start_handle_request, services_service(super()._create_app))
 
     def _serve(self, app_factory, host, port, socket, services_service, reloader_service=None, **config):
-        services_service(super(Publisher, self)._serve, app_factory)
+        services_service(super()._serve, app_factory)
 
         if (reloader_service is not None) and self.has_multi_processes:
             self.logger.warning("The reloader service can't be activated in multi-processes")
@@ -253,7 +250,7 @@ class Publisher(http_publisher.Publisher):
             self.logaccess,
             app_factory,
             reloader_service,
-            super(Publisher, self).launch_browser,
+            super().launch_browser,
             bind=self.endpoint[2],
             **config,
         ).run()
