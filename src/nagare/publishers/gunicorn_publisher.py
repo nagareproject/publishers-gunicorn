@@ -108,6 +108,8 @@ class GunicornPublisher(base.BaseApplication):
         self.cfg.logaccess = logaccess
 
     def load_config(self):
+        self.config.setdefault('control_socket_disable', True)
+
         for k, v in self.config.items():
             self.cfg.set(k, v)
 
@@ -174,6 +176,18 @@ class Publisher(http_publisher.Publisher):
                 'suppress_ragged_eofs/boolean',
                 'do_handshake_on_connect/boolean',
                 'ciphers/string',
+                'control_socket/string',
+                'control_socket_mode/integer',
+                'control_socket_disable/boolean',
+                'forwarded-allow-ips/string_list',
+                'http2_initial_window_size/integer',
+                'http2_max_concurrent_streams/integer',
+                'http2_max_frame_size/integer',
+                'http2_max_header_list_size/integer',
+                'http_protocols/string',
+                'max_requests_jitter/integer',
+                'protocol/string',
+                'proxy_protocol/boolean',
             )
         )
     )
