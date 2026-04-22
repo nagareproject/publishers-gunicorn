@@ -15,15 +15,12 @@ import traceback
 import multiprocessing
 from functools import partial
 
-from ws4py import websocket
 from gunicorn import util, workers, glogging
 from gunicorn.app import base
-from ws4py.server import wsgiutils
 
-from nagare.server import http_publisher
+from nagare.publishers import http_publisher
 
 gthread_worker = util.load_class(workers.SUPPORTED_WORKERS['gthread'])
-workers.SUPPORTED_WORKERS['gthread'] = 'nagare.publishers.gunicorn_publisher.Worker'
 
 
 class Logger(glogging.Logger):
@@ -54,46 +51,6 @@ class Cfg:
         self.ssl_options = cfg.ssl_options
 
 
-class WebSocket(workers.gthread.TConn, websocket.WebSocket):
-    def __init__(self):
-        pass
-
-    def bind_to(self, conn):
-        workers.gthread.TConn.__init__(self, Cfg(conn.cfg), conn.sock, conn.client, conn.server)
-        websocket.WebSocket.__init__(self, conn.sock)
-
-    def close(self):
-        self.closed(None)
-        super().close()
-
-
-class Worker(gthread_worker):
-    def handle(self, conn):
-        if isinstance(conn, WebSocket):
-            return conn.process(conn.sock.recv(1024)), conn
-        else:
-            keepalive, conn = super().handle(conn)
-            websocket = conn.websocket
-            if websocket is not None:
-                del conn.websocket
-                websocket.bind_to(conn)
-                conn = websocket
-
-            return keepalive, conn
-
-    def handle_request(self, req, conn):
-        keepalive = super().handle_request(req, conn)
-        conn.websocket = req.websocket
-
-        return keepalive
-
-
-class WebSocketWSGIApplication(wsgiutils.WebSocketWSGIApplication):
-    def __call__(self, environ, start_response):
-        environ['ws4py.socket'] = None
-        return super().__call__(environ, start_response)
-
-
 class GunicornPublisher(base.BaseApplication):
     def __init__(self, logger_name, logaccess, app_factory, reloader, launch_browser, services_service, **config):
         self.load = app_factory
@@ -117,12 +74,7 @@ class GunicornPublisher(base.BaseApplication):
         if self.reloader is not None:
             self.cfg.set('post_worker_init', lambda worker: self.services(self.post_worker_init, self.reloader, worker))
 
-        self.cfg.set('post_request', self.post_request)
         self.cfg.set('logger_class', 'egg:nagare-publishers-gunicorn#nagare')
-
-    @staticmethod
-    def post_request(worker, req, environ, resp):
-        req.websocket = environ.get('websocket')
 
     @staticmethod
     def post_worker_init(reloader, worker, services_service):
@@ -192,8 +144,6 @@ class Publisher(http_publisher.Publisher):
         )
     )
 
-    websocket_app = WebSocketWSGIApplication
-
     def __init__(self, name, dist, logaccess, workers, threads, **config):
         """Initialization."""
         self.logaccess = logaccess
@@ -225,24 +175,13 @@ class Publisher(http_publisher.Publisher):
     def monitor(reload_action):
         return 0
 
-    @staticmethod
-    def set_websocket(websocket, environ):
-        environ['websocket'] = websocket
-
-    def create_websocket(self, environ):
-        environ['set_websocket'] = self.set_websocket
-        return WebSocket() if environ.get('HTTP_UPGRADE', '').lower() == 'websocket' else None
-
     def launch_browser(self):
         pass
 
     def start_handle_request(self, app, environ, start_response, services_service):
-        return services_service(
-            super().start_handle_request,
-            app,
-            environ,
-            lambda status, headers: None if start_response.__self__.status else start_response(status, headers),
-        )
+        environ['ws4py.socket'] = environ['gunicorn.socket']
+
+        return services_service(super().start_handle_request, app, environ, start_response)
 
     def _create_app(self, services_service):
         return lambda: partial(

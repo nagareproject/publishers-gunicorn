@@ -24,7 +24,6 @@ authors = [
 license = {file = 'LICENSE.txt'}
 requires-python = '>=3.7'
 dependencies = [
-    'ws4py',
     'gunicorn[gthread]',
     'nagare-server-http'
 ]
